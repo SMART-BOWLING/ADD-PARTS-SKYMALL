@@ -11,70 +11,90 @@
       --accent: #dc143c;
       --text-dark: #1a2f40;
       --text-light: #ffffff;
+      --input-padding: 16px;
+      --border-radius: 8px;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+    }
     body {
       font-family: 'Segoe UI', Tahoma, sans-serif;
       background-color: var(--light-bg);
       color: var(--text-dark);
       display: flex;
       justify-content: center;
-      align-items: center;
+      align-items: flex-start;
       min-height: 100vh;
+      padding: 20px;
     }
     .container {
       background-color: var(--text-light);
-      border-radius: 12px;
+      border-radius: var(--border-radius);
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
       width: 100%;
       max-width: 600px;
-      padding: 30px;
+      padding: 20px;
       position: relative;
     }
     header {
       background-color: var(--dark-bg);
       padding: 16px;
-      border-radius: 8px 8px 0 0;
+      border-radius: var(--border-radius);
       text-align: center;
-      margin: -20px -20px 20px -20px;
+      margin: 0 0 25px 0;
     }
     header h1 {
-      font-size: 2rem;
+      font-size: 1.5rem;
       color: var(--text-light);
     }
     form {
       display: flex;
       flex-direction: column;
+      gap: 20px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
     label {
-      margin-bottom: 20px;
-      font-size: 0.9rem;
+      font-weight: 500;
+      font-size: 0.95rem;
     }
     input[type="text"],
     input[type="number"],
     input[type="file"] {
       width: 100%;
-      padding: 20px;
+      padding: var(--input-padding);
       border: 2px solid #ccc;
-      border-radius: 6px;
-      font-size: 1.5rem;
+      border-radius: var(--border-radius);
+      font-size: 1rem;
       outline: none;
       transition: border-color 0.2s;
+      min-height: 50px; /* Минимальная высота для удобного касания */
     }
     input:focus {
       border-color: var(--accent);
     }
-    button {
-      margin-top: 20px;
+    /* Стилизация файлового инпута для мобильных */
+    input[type="file"] {
       padding: 12px;
+      background-color: #f8f9fa;
+    }
+    button {
+      margin-top: 10px;
+      padding: 16px;
       background-color: var(--accent);
       color: var(--text-light);
       border: none;
-      border-radius: 6px;
-      font-size: 2rem;
+      border-radius: var(--border-radius);
+      font-size: 1.2rem;
+      font-weight: 600;
       cursor: pointer;
       transition: background-color 0.2s;
-      position: relative;
+      min-height: 60px; /* Увеличенная высота для удобного касания */
     }
     button:hover {
       background-color: #b0102f;
@@ -92,15 +112,16 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background-color: rgba(0, 0, 0, 0.5);
+      background-color: rgba(0, 0, 0, 0.7);
       z-index: 1000;
       justify-content: center;
       align-items: center;
+      flex-direction: column;
     }
     
     .spinner {
-      width: 60px;
-      height: 60px;
+      width: 50px;
+      height: 50px;
       border: 5px solid rgba(255, 255, 255, 0.3);
       border-radius: 50%;
       border-top: 5px solid var(--accent);
@@ -115,7 +136,7 @@
     .loader-text {
       color: white;
       margin-top: 15px;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       text-align: center;
     }
     
@@ -123,6 +144,77 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+    }
+
+    /* Медиа-запросы для адаптивности */
+    @media (max-width: 480px) {
+      body {
+        padding: 10px;
+        align-items: stretch;
+      }
+      
+      .container {
+        padding: 15px;
+      }
+      
+      header {
+        padding: 14px;
+        margin-bottom: 20px;
+      }
+      
+      header h1 {
+        font-size: 1.3rem;
+      }
+      
+      input[type="text"],
+      input[type="number"],
+      input[type="file"] {
+        padding: 14px;
+        font-size: 16px; /* Предотвращает масштабирование в iOS */
+      }
+      
+      button {
+        padding: 14px;
+        font-size: 1.1rem;
+      }
+      
+      .spinner {
+        width: 40px;
+        height: 40px;
+        border-width: 4px;
+      }
+    }
+
+    /* Для очень маленьких экранов */
+    @media (max-width: 350px) {
+      header h1 {
+        font-size: 1.1rem;
+      }
+      
+      input[type="text"],
+      input[type="number"],
+      input[type="file"] {
+        padding: 12px;
+      }
+      
+      button {
+        padding: 12px;
+        font-size: 1rem;
+      }
+    }
+
+    /* Улучшение для landscape ориентации */
+    @media (max-height: 500px) and (orientation: landscape) {
+      body {
+        align-items: flex-start;
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+      
+      .container {
+        max-height: 95vh;
+        overflow-y: auto;
+      }
     }
   </style>
 </head>
@@ -132,14 +224,20 @@
       <h1>Добавить деталь</h1>
     </header>
     <form id="form">
-      <label for="number"></label>
-      <input type="text" id="number" placeholder="000-000-000" required>
+      <div class="form-group">
+        <label for="number">Номер детали</label>
+        <input type="text" id="number" placeholder="000-000-000" required>
+      </div>
 
-      <label for="qty"></label>
-      <input type="number" id="qty" min="1" value="" required>
+      <div class="form-group">
+        <label for="qty">Количество</label>
+        <input type="number" id="qty" min="1" value="" required>
+      </div>
 
-      <label for="photo"></label>
-      <input type="file" id="photo" accept="image/*" required>
+      <div class="form-group">
+        <label for="photo">Фотография</label>
+        <input type="file" id="photo" accept="image/*" required>
+      </div>
 
       <button type="submit" id="submit-btn">Отправить</button>
     </form>
@@ -149,6 +247,7 @@
   <div class="loader" id="loader">
     <div class="loader-content">
       <div class="spinner"></div>
+      <div class="loader-text">Отправка данных...</div>
     </div>
   </div>
 
@@ -228,6 +327,11 @@
       };
       
       reader.readAsDataURL(file);
+    });
+
+    // Улучшение UX: фокус на первом поле при загрузке
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('number').focus();
     });
   </script>
 </body>
