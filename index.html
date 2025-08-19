@@ -29,6 +29,7 @@
       width: 100%;
       max-width: 600px;
       padding: 30px;
+      position: relative;
     }
     header {
       background-color: var(--dark-bg);
@@ -73,9 +74,55 @@
       font-size: 2rem;
       cursor: pointer;
       transition: background-color 0.2s;
+      position: relative;
     }
     button:hover {
       background-color: #b0102f;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    
+    /* Стили для индикатора загрузки */
+    .loader {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    .spinner {
+      width: 60px;
+      height: 60px;
+      border: 5px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top: 5px solid var(--accent);
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .loader-text {
+      color: white;
+      margin-top: 15px;
+      font-size: 1.2rem;
+      text-align: center;
+    }
+    
+    .loader-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
   </style>
 </head>
@@ -94,15 +141,27 @@
       <label for="photo"></label>
       <input type="file" id="photo" accept="image/*" required>
 
-      <button type="submit">Отправить</button>
+      <button type="submit" id="submit-btn">Отправить</button>
     </form>
+  </div>
+  
+  <!-- Индикатор загрузки -->
+  <div class="loader" id="loader">
+    <div class="loader-content">
+      <div class="spinner"></div>
+    </div>
   </div>
 
   <script>
     // URL вашего веб-приложения Google Apps Script
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzf5Nnw0eNCToUgFF2MnMNXqcxlxkEUOHsF2qCz66RYzBnmzFSlrBTHjBAK1LFOcVDyRQ/exec';
     
-    document.getElementById('form').addEventListener('submit', async function(e) {
+    // Элементы DOM
+    const form = document.getElementById('form');
+    const submitBtn = document.getElementById('submit-btn');
+    const loader = document.getElementById('loader');
+    
+    form.addEventListener('submit', async function(e) {
       e.preventDefault();
       
       const number = document.getElementById('number').value.trim();
@@ -113,6 +172,10 @@
         alert('Заполните все поля и выберите фото.');
         return;
       }
+      
+      // Блокируем кнопку и показываем индикатор загрузки
+      submitBtn.disabled = true;
+      loader.style.display = 'flex';
       
       const file = fileInput.files[0];
       const reader = new FileReader();
@@ -140,14 +203,28 @@
             })
           });
           
-          // Поскольку мы используем no-cors, мы не можем прочитать ответ
-          // Но мы можем показать сообщение об успехе
-          alert('✅ Данные отправлены! Проверьте таблицу.');
+          // Скрываем индикатор загрузки
+          loader.style.display = 'none';
+          submitBtn.disabled = false;
+          
+          // Показываем сообщение об успехе
+          alert('✅ Данные отправлены!');
           document.getElementById('form').reset();
         } catch (error) {
+          // Скрываем индикатор загрузки в случае ошибки
+          loader.style.display = 'none';
+          submitBtn.disabled = false;
+          
           console.error('Ошибка:', error);
           alert('❌ Произошла ошибка при отправке данных.');
         }
+      };
+      
+      reader.onerror = function() {
+        // Скрываем индикатор загрузки в случае ошибки чтения файла
+        loader.style.display = 'none';
+        submitBtn.disabled = false;
+        alert('❌ Ошибка при чтении файла.');
       };
       
       reader.readAsDataURL(file);
