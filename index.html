@@ -13,6 +13,8 @@
       --text-light: #ffffff;
       --input-padding: 14px;
       --border-radius: 8px;
+      --success: #28a745;
+      --warning: #ffc107;
     }
     * { 
       box-sizing: border-box; 
@@ -177,6 +179,49 @@
       flex-direction: column;
       align-items: center;
     }
+    
+    /* Преимум для изображения */
+    .image-preview {
+      display: none;
+      margin-top: 10px;
+      max-width: 100%;
+      text-align: center;
+    }
+    
+    .image-preview img {
+      max-width: 100%;
+      max-height: 150px;
+      border-radius: var(--border-radius);
+      border: 2px solid #ddd;
+    }
+    
+    .preview-title {
+      font-size: 0.9rem;
+      color: #666;
+      margin-bottom: 5px;
+    }
+
+    /* Сообщения о статусе */
+    .status-message {
+      display: none;
+      padding: 10px;
+      border-radius: var(--border-radius);
+      margin: 10px 0;
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    
+    .status-success {
+      background-color: rgba(40, 167, 69, 0.1);
+      border: 1px solid var(--success);
+      color: var(--success);
+    }
+    
+    .status-error {
+      background-color: rgba(220, 20, 60, 0.1);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+    }
 
     /* Медиа-запросы для адаптивности */
     @media (max-width: 480px) {
@@ -221,7 +266,6 @@
       }
     }
 
-    /* Для очень маленьких экранов */
     @media (max-width: 350px) and (max-height: 650px) {
       header h1 {
         font-size: 1.1rem;
@@ -292,6 +336,9 @@
     <header>
       <h1>ADD PART SKYMALL</h1>
     </header>
+    
+    <div class="status-message" id="statusMessage"></div>
+    
     <form id="form">
       <div class="form-content">
         <div class="form-group">
@@ -307,6 +354,10 @@
         <div class="form-group">
           <label for="photo">Фотография</label>
           <input type="file" id="photo" accept="image/*" required>
+          <div class="image-preview" id="imagePreview">
+            <div class="preview-title">Предпросмотр:</div>
+            <img id="previewImage" src="" alt="Предпросмотр">
+          </div>
         </div>
 
         <button type="submit" id="submit-btn">Отправить</button>
@@ -318,36 +369,143 @@
   <div class="loader" id="loader">
     <div class="loader-content">
       <div class="spinner"></div>
-      <div class="loader-text">Отправка данных...</div>
+      <div class="loader-text" id="loaderMessage">Загрузка...</div>
     </div>
   </div>
 
   <script>
-    // URL вашего веб-приложения Google Apps Script
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzzpq_r2kqTpkdzpkJvRFqn6HJa2edcaFlqkiecWcH-7ed4Ii48tFPclqdtv0BMoWkd8A/exec';
+    // Cloudinary настройки
+    const CLOUDINARY_CLOUD_NAME = 'dplmdnxvk';
+    const CLOUDINARY_UPLOAD_PRESET = 'ADD_SKYMALL';
+    const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
+    
+    // Google Apps Script URL
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbwNbLJgfoWcHkqhWkQfqHg068elh7biEWYZK3Fzv5QbH0wU0lDi3C8xVP-Hd5WbTLopiw/exec';
     
     // Элементы DOM
     const form = document.getElementById('form');
     const submitBtn = document.getElementById('submit-btn');
     const loader = document.getElementById('loader');
+    const loaderMessage = document.getElementById('loaderMessage');
+    const imagePreview = document.getElementById('imagePreview');
+    const previewImage = document.getElementById('previewImage');
+    const fileInput = document.getElementById('photo');
+    const statusMessage = document.getElementById('statusMessage');
     
-    // Функция для проверки, помещается ли форма на экране
-    function checkFormFitsScreen() {
-      const formHeight = document.querySelector('.container').offsetHeight;
-      const windowHeight = window.innerHeight;
-      
-      if (formHeight > windowHeight) {
-        // Если форма не помещается, немного уменьшаем отступы
-        document.querySelector('.container').style.padding = '10px';
-        document.querySelector('header').style.padding = '8px';
-        document.querySelector('header').style.marginBottom = '8px';
-        document.querySelectorAll('input').forEach(input => {
-          input.style.padding = '10px';
-          input.style.minHeight = '40px';
-        });
-        document.querySelector('button').style.padding = '10px';
-        document.querySelector('button').style.minHeight = '45px';
+    // Функция для преобразования Cloudinary URL в нужный формат - ИСПРАВЛЕНА
+    function formatCloudinaryUrl(originalUrl) {
+      try {
+        console.log('Исходный URL от Cloudinary:', originalUrl);
+        
+        // Разбираем URL на части
+        const url = new URL(originalUrl);
+        
+        // Извлекаем путь после /upload/
+        const pathParts = url.pathname.split('/upload/');
+        
+        if (pathParts.length < 2) {
+          console.warn('Не удалось разобрать Cloudinary URL:', originalUrl);
+          return originalUrl;
+        }
+        
+        // Получаем версию (v параметр) из query string
+        const version = url.searchParams.get('v') || '';
+        
+        // Формируем новый путь с трансформациями
+        const newPath = `/upload/f_auto,q_auto,w_800,c_limit${version ? '/v' + version : ''}${pathParts[1]}`;
+        
+        // Собираем новый URL - ВАЖНО: сохраняем хостнейм
+        const newUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image${newPath}`;
+        
+        console.log('Сформированный URL:', newUrl);
+        return newUrl;
+      } catch (error) {
+        console.error('Ошибка при форматировании URL:', error);
+        return originalUrl;
       }
+    }
+    
+    // Альтернативный метод: извлекаем public_id и строим URL заново - ИСПРАВЛЕН
+    function formatCloudinaryUrlAlternative(cloudinaryResult) {
+      try {
+        const publicId = cloudinaryResult.public_id;
+        const version = cloudinaryResult.version;
+        
+        // Строим URL в нужном формате - ПРАВИЛЬНЫЙ формат
+        let formattedUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto,w_800,c_limit`;
+        
+        // Добавляем версию, если она есть
+        if (version) {
+          formattedUrl += `/v${version}`;
+        }
+        
+        // Добавляем public_id
+        formattedUrl += `/${publicId}`;
+        
+        // Добавляем расширение .jpg если его нет
+        if (!formattedUrl.endsWith('.jpg') && !formattedUrl.endsWith('.jpeg') && 
+            !formattedUrl.endsWith('.png') && !formattedUrl.endsWith('.gif')) {
+          formattedUrl += '.jpg';
+        }
+        
+        console.log('Альтернативный метод - сформированный URL:', formattedUrl);
+        return formattedUrl;
+      } catch (error) {
+        console.error('Ошибка альтернативного метода:', error);
+        return cloudinaryResult.secure_url;
+      }
+    }
+    
+    // Третий метод: простой и надежный
+    function formatCloudinaryUrlSimple(cloudinaryResult) {
+      try {
+        // Берем public_id из результата
+        const publicId = cloudinaryResult.public_id;
+        const version = cloudinaryResult.version;
+        
+        // Просто строим URL по шаблону
+        const formattedUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto,w_800,c_limit${version ? '/v' + version : ''}/${publicId}.jpg`;
+        
+        console.log('Простой метод - сформированный URL:', formattedUrl);
+        return formattedUrl;
+      } catch (error) {
+        console.error('Ошибка простого метода:', error);
+        return cloudinaryResult.secure_url;
+      }
+    }
+    
+    // Предпросмотр изображения
+    fileInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        // Проверяем размер файла (макс 10MB)
+        if (file.size > 10 * 1024 * 1024) {
+          showMessage('Файл слишком большой. Максимальный размер: 10MB', 'error');
+          e.target.value = '';
+          return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          previewImage.src = e.target.result;
+          imagePreview.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        imagePreview.style.display = 'none';
+        previewImage.src = '';
+      }
+    });
+    
+    // Показать сообщение
+    function showMessage(text, type = 'success') {
+      statusMessage.textContent = text;
+      statusMessage.className = `status-message status-${type}`;
+      statusMessage.style.display = 'block';
+      
+      setTimeout(() => {
+        statusMessage.style.display = 'none';
+      }, 5000);
     }
     
     form.addEventListener('submit', async function(e) {
@@ -355,79 +513,150 @@
       
       const number = document.getElementById('number').value.trim();
       const qty = document.getElementById('qty').value;
-      const fileInput = document.getElementById('photo');
       
-      if (!number || !qty || fileInput.files.length === 0) {
-        alert('Заполните все поля и выберите фото.');
+      if (!number) {
+        showMessage('Введите номер детали', 'error');
+        document.getElementById('number').focus();
+        return;
+      }
+      
+      if (!qty || qty < 1) {
+        showMessage('Введите корректное количество', 'error');
+        document.getElementById('qty').focus();
+        return;
+      }
+      
+      if (fileInput.files.length === 0) {
+        showMessage('Выберите фотографию', 'error');
         return;
       }
       
       // Блокируем кнопку и показываем индикатор загрузки
       submitBtn.disabled = true;
       loader.style.display = 'flex';
+      loaderMessage.textContent = 'Загрузка изображения...';
       
       const file = fileInput.files[0];
       const reader = new FileReader();
       
       reader.onload = async function(evt) {
-        const dataUrl = evt.target.result;
-        const parts = dataUrl.split(',');
-        const mimeType = parts[0].match(/data:(.*);base64/)[1];
-        const base64 = parts[1];
-        
         try {
-          // Отправляем данные на сервер Google Apps Script
-          const response = await fetch(SCRIPT_URL, {
+          const base64Data = evt.target.result;
+          
+          // Шаг 1: Загружаем изображение в Cloudinary
+          loaderMessage.textContent = 'Загрузка в Cloudinary...';
+          
+          const timestamp = Math.floor(Date.now() / 1000);
+          const publicId = 'SKYMALL_part_' + number.replace(/[^\w]/g, '_') + '_' + timestamp;
+          
+          // Создаем FormData для Cloudinary
+          const cloudinaryFormData = new FormData();
+          cloudinaryFormData.append('file', base64Data);
+          cloudinaryFormData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+          cloudinaryFormData.append('public_id', publicId);
+          cloudinaryFormData.append('folder', 'ZIP_SKYMALL');
+          
+          // Отправляем в Cloudinary
+          const cloudinaryResponse = await fetch(CLOUDINARY_UPLOAD_URL, {
             method: 'POST',
-            mode: 'no-cors',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              number: number,
-              qty: qty,
-              mimeType: mimeType,
-              base64: base64,
-              name: file.name
-            })
+            body: cloudinaryFormData
           });
+          
+          if (!cloudinaryResponse.ok) {
+            const errorText = await cloudinaryResponse.text();
+            throw new Error(`Ошибка Cloudinary: ${errorText}`);
+          }
+          
+          const cloudinaryResult = await cloudinaryResponse.json();
+          
+          if (cloudinaryResult.error) {
+            throw new Error(`Cloudinary: ${cloudinaryResult.error.message}`);
+          }
+          
+          console.log('Cloudinary результат:', cloudinaryResult);
+          
+          // Используем простой метод для гарантированного результата
+          const formattedUrl = formatCloudinaryUrlSimple(cloudinaryResult);
+          
+          console.log('Форматированный Cloudinary URL:', formattedUrl);
+          
+          // Проверяем что URL правильный
+          if (!formattedUrl.includes('res.cloudinary.com')) {
+            throw new Error('Неправильный формат Cloudinary URL');
+          }
+          
+          // Шаг 2: Отправляем данные в Google Sheets
+          loaderMessage.textContent = 'Сохранение данных...';
+          
+          // Отправляем форматированную ссылку и base64
+          const formData = new FormData();
+          formData.append('number', number);
+          formData.append('qty', qty);
+          formData.append('imageUrl', formattedUrl);  // Форматированная Cloudinary ссылка для колонки D
+          formData.append('base64', base64Data);       // Base64 для ImgBB (колонка F)
+          
+          const response = await fetch(GAS_URL, {
+            method: 'POST',
+            body: formData
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Ошибка сети: ${response.status}`);
+          }
+          
+          const result = await response.json();
           
           // Скрываем индикатор загрузки
           loader.style.display = 'none';
           submitBtn.disabled = false;
           
-          // Показываем сообщение об успехе
-          alert('✅ Данные отправлены!');
-          document.getElementById('form').reset();
+          if (result.result === 'success') {
+            showMessage(
+              `✅ Данные сохранены!\n` +
+              `Номер: ${number}\n` +
+              `Количество: ${qty}\n` +
+              `Ссылка: создана`,
+              'success'
+            );
+            
+            // Сбрасываем форму
+            document.getElementById('form').reset();
+            imagePreview.style.display = 'none';
+            
+            // Автофокус на первом поле
+            document.getElementById('number').focus();
+            
+            // Показываем ссылки в консоли для отладки
+            console.log('✅ Форматированный Cloudinary URL (колонка D):', formattedUrl);
+            console.log('✅ Исходный Cloudinary URL:', cloudinaryResult.secure_url);
+            
+          } else {
+            throw new Error(result.message || 'Ошибка сохранения');
+          }
+          
         } catch (error) {
           // Скрываем индикатор загрузки в случае ошибки
           loader.style.display = 'none';
           submitBtn.disabled = false;
           
           console.error('Ошибка:', error);
-          alert('❌ Произошла ошибка при отправке данных.');
+          showMessage(`❌ ${error.message}`, 'error');
         }
       };
       
       reader.onerror = function() {
-        // Скрываем индикатор загрузки в случае ошибки чтения файла
         loader.style.display = 'none';
         submitBtn.disabled = false;
-        alert('❌ Ошибка при чтении файла.');
+        showMessage('❌ Ошибка при чтении файла', 'error');
       };
       
       reader.readAsDataURL(file);
     });
-
+    
     // Улучшение UX: фокус на первом поле при загрузке
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('number').focus();
-      // Проверяем, помещается ли форма на экране
-      setTimeout(checkFormFitsScreen, 100);
     });
-    
-    // Также проверяем при изменении размера окна
-    window.addEventListener('resize', checkFormFitsScreen);
   </script>
 </body>
 </html>
