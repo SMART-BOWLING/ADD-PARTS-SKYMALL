@@ -204,11 +204,13 @@
     /* Сообщения о статусе */
     .status-message {
       display: none;
-      padding: 10px;
+      padding: 12px;
       border-radius: var(--border-radius);
       margin: 10px 0;
       font-size: 0.9rem;
-      text-align: center;
+      text-align: left;
+      position: relative;
+      word-break: break-word;
     }
     
     .status-success {
@@ -221,6 +223,30 @@
       background-color: rgba(220, 20, 60, 0.1);
       border: 1px solid var(--accent);
       color: var(--accent);
+    }
+
+    .status-warning {
+      background-color: rgba(255, 193, 7, 0.1);
+      border: 1px solid var(--warning);
+      color: #856404;
+    }
+
+    .close-status {
+      position: absolute;
+      top: 8px;
+      right: 12px;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 18px;
+      background: none;
+      border: none;
+      color: inherit;
+      opacity: 0.7;
+      padding: 0 5px;
+    }
+
+    .close-status:hover {
+      opacity: 1;
     }
 
     /* Медиа-запросы для адаптивности */
@@ -334,7 +360,7 @@
 <body>
   <div class="container">
     <header>
-      <h1>ADD PART SKYMALL</h1>
+      <h1>ADD PART LS SKYMALL</h1>
     </header>
     
     <div class="status-message" id="statusMessage"></div>
@@ -379,8 +405,8 @@
     const CLOUDINARY_UPLOAD_PRESET = 'ADD_SKYMALL';
     const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
     
-    // Google Apps Script URL
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbwNbLJgfoWcHkqhWkQfqHg068elh7biEWYZK3Fzv5QbH0wU0lDi3C8xVP-Hd5WbTLopiw/exec';
+    // Google Apps Script URL - ВСТАВЬТЕ ВАШ URL ПОСЛЕ ДЕПЛОЯ
+    const GAS_URL = 'https://script.google.com/macros/s/AKfycbyjLTaRt3E9xHCFqtDcjTMmpU6xnArsQt8syQGWm21rdQVI8loYqMMzWw1R6GhvbXFkIA/exec';
     
     // Элементы DOM
     const form = document.getElementById('form');
@@ -390,98 +416,110 @@
     const imagePreview = document.getElementById('imagePreview');
     const previewImage = document.getElementById('previewImage');
     const fileInput = document.getElementById('photo');
-    const statusMessage = document.getElementById('statusMessage');
+    const statusMessageDiv = document.getElementById('statusMessage');
     
-    // Функция для преобразования Cloudinary URL в нужный формат - ИСПРАВЛЕНА
-    function formatCloudinaryUrl(originalUrl) {
+    // Флаг для предотвращения повторной отправки
+    let isSubmitting = false;
+    
+    // Функция для отображения сообщений
+    function showMessage(text, type = 'success') {
+      statusMessageDiv.innerHTML = '';
+      statusMessageDiv.className = `status-message status-${type}`;
+      
+      const messageSpan = document.createElement('span');
+      messageSpan.innerHTML = text.replace(/\n/g, '<br>');
+      statusMessageDiv.appendChild(messageSpan);
+      
+      const closeBtn = document.createElement('button');
+      closeBtn.innerHTML = '×';
+      closeBtn.className = 'close-status';
+      closeBtn.setAttribute('aria-label', 'Закрыть');
+      closeBtn.onclick = function() {
+        statusMessageDiv.style.display = 'none';
+      };
+      statusMessageDiv.appendChild(closeBtn);
+      
+      statusMessageDiv.style.display = 'block';
+      statusMessageDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    // Функция для проверки существования номера детали
+    async function checkPartNumberExists(partNumber) {
       try {
-        console.log('Исходный URL от Cloudinary:', originalUrl);
+        const checkFormData = new FormData();
+        checkFormData.append('action', 'check');
+        checkFormData.append('number', partNumber);
         
-        // Разбираем URL на части
-        const url = new URL(originalUrl);
+        const response = await fetch(GAS_URL, {
+          method: 'POST',
+          body: checkFormData
+        });
         
-        // Извлекаем путь после /upload/
-        const pathParts = url.pathname.split('/upload/');
-        
-        if (pathParts.length < 2) {
-          console.warn('Не удалось разобрать Cloudinary URL:', originalUrl);
-          return originalUrl;
+        if (!response.ok) {
+          throw new Error(`Ошибка сети при проверке: ${response.status}`);
         }
         
-        // Получаем версию (v параметр) из query string
-        const version = url.searchParams.get('v') || '';
-        
-        // Формируем новый путь с трансформациями
-        const newPath = `/upload/f_auto,q_auto,w_800,c_limit${version ? '/v' + version : ''}${pathParts[1]}`;
-        
-        // Собираем новый URL - ВАЖНО: сохраняем хостнейм
-        const newUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image${newPath}`;
-        
-        console.log('Сформированный URL:', newUrl);
-        return newUrl;
+        const result = await response.json();
+        return result.exists === true;
       } catch (error) {
-        console.error('Ошибка при форматировании URL:', error);
-        return originalUrl;
+        console.error('Ошибка при проверке номера:', error);
+        showMessage(`⚠️ Не удалось проверить уникальность номера: ${error.message}`, 'warning');
+        return false;
       }
     }
     
-    // Альтернативный метод: извлекаем public_id и строим URL заново - ИСПРАВЛЕН
-    function formatCloudinaryUrlAlternative(cloudinaryResult) {
-      try {
-        const publicId = cloudinaryResult.public_id;
-        const version = cloudinaryResult.version;
-        
-        // Строим URL в нужном формате - ПРАВИЛЬНЫЙ формат
-        let formattedUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto,w_800,c_limit`;
-        
-        // Добавляем версию, если она есть
-        if (version) {
-          formattedUrl += `/v${version}`;
-        }
-        
-        // Добавляем public_id
-        formattedUrl += `/${publicId}`;
-        
-        // Добавляем расширение .jpg если его нет
-        if (!formattedUrl.endsWith('.jpg') && !formattedUrl.endsWith('.jpeg') && 
-            !formattedUrl.endsWith('.png') && !formattedUrl.endsWith('.gif')) {
-          formattedUrl += '.jpg';
-        }
-        
-        console.log('Альтернативный метод - сформированный URL:', formattedUrl);
-        return formattedUrl;
-      } catch (error) {
-        console.error('Ошибка альтернативного метода:', error);
-        return cloudinaryResult.secure_url;
+    // Функция для загрузки фото в Cloudinary
+    async function uploadToCloudinary(file, number) {
+      const base64Data = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (evt) => resolve(evt.target.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      
+      const timestamp = Math.floor(Date.now() / 1000);
+      const safeNumber = number.replace(/[^\w]/g, '_');
+      const publicId = `SKYMALL_part_${safeNumber}_${timestamp}`;
+      
+      const cloudinaryFormData = new FormData();
+      cloudinaryFormData.append('file', base64Data);
+      cloudinaryFormData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+      cloudinaryFormData.append('public_id', publicId);
+      cloudinaryFormData.append('folder', 'ZIP_SKYMALL');
+      
+      const cloudinaryResponse = await fetch(CLOUDINARY_UPLOAD_URL, {
+        method: 'POST',
+        body: cloudinaryFormData
+      });
+      
+      if (!cloudinaryResponse.ok) {
+        const errorText = await cloudinaryResponse.text();
+        throw new Error(`Ошибка Cloudinary: ${errorText}`);
       }
-    }
-    
-    // Третий метод: простой и надежный
-    function formatCloudinaryUrlSimple(cloudinaryResult) {
-      try {
-        // Берем public_id из результата
-        const publicId = cloudinaryResult.public_id;
-        const version = cloudinaryResult.version;
-        
-        // Просто строим URL по шаблону
-        const formattedUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto,w_800,c_limit${version ? '/v' + version : ''}/${publicId}.jpg`;
-        
-        console.log('Простой метод - сформированный URL:', formattedUrl);
-        return formattedUrl;
-      } catch (error) {
-        console.error('Ошибка простого метода:', error);
-        return cloudinaryResult.secure_url;
+      
+      const cloudinaryResult = await cloudinaryResponse.json();
+      
+      if (cloudinaryResult.error) {
+        throw new Error(`Cloudinary: ${cloudinaryResult.error.message}`);
       }
+      
+      // Форматируем URL
+      const publicId_final = cloudinaryResult.public_id;
+      const version = cloudinaryResult.version;
+      const formattedUrl = `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/image/upload/f_auto,q_auto,w_800,c_limit${version ? '/v' + version : ''}/${publicId_final}.jpg`;
+      
+      return formattedUrl;
     }
     
     // Предпросмотр изображения
     fileInput.addEventListener('change', function(e) {
       const file = e.target.files[0];
       if (file) {
-        // Проверяем размер файла (макс 10MB)
         if (file.size > 10 * 1024 * 1024) {
-          showMessage('Файл слишком большой. Максимальный размер: 10MB', 'error');
+          showMessage('❌ Файл слишком большой. Максимальный размер: 10MB', 'error');
           e.target.value = '';
+          imagePreview.style.display = 'none';
+          previewImage.src = '';
           return;
         }
         
@@ -497,165 +535,139 @@
       }
     });
     
-    // Показать сообщение
-    function showMessage(text, type = 'success') {
-      statusMessage.textContent = text;
-      statusMessage.className = `status-message status-${type}`;
-      statusMessage.style.display = 'block';
-      
-      setTimeout(() => {
-        statusMessage.style.display = 'none';
-      }, 5000);
-    }
-    
     form.addEventListener('submit', async function(e) {
       e.preventDefault();
+      
+      if (isSubmitting) {
+        showMessage('⚠️ Отправка уже выполняется, подождите...', 'warning');
+        return;
+      }
       
       const number = document.getElementById('number').value.trim();
       const qty = document.getElementById('qty').value;
       
       if (!number) {
-        showMessage('Введите номер детали', 'error');
+        showMessage('❌ Введите номер детали', 'error');
         document.getElementById('number').focus();
         return;
       }
       
       if (!qty || qty < 1) {
-        showMessage('Введите корректное количество', 'error');
+        showMessage('❌ Введите корректное количество (минимум 1)', 'error');
         document.getElementById('qty').focus();
         return;
       }
       
       if (fileInput.files.length === 0) {
-        showMessage('Выберите фотографию', 'error');
+        showMessage('❌ Выберите фотографию', 'error');
         return;
       }
       
-      // Блокируем кнопку и показываем индикатор загрузки
+      isSubmitting = true;
       submitBtn.disabled = true;
       loader.style.display = 'flex';
-      loaderMessage.textContent = 'Загрузка изображения...';
       
-      const file = fileInput.files[0];
-      const reader = new FileReader();
-      
-      reader.onload = async function(evt) {
-        try {
-          const base64Data = evt.target.result;
-          
-          // Шаг 1: Загружаем изображение в Cloudinary
-          loaderMessage.textContent = 'Загрузка в Cloudinary...';
-          
-          const timestamp = Math.floor(Date.now() / 1000);
-          const publicId = 'SKYMALL_part_' + number.replace(/[^\w]/g, '_') + '_' + timestamp;
-          
-          // Создаем FormData для Cloudinary
-          const cloudinaryFormData = new FormData();
-          cloudinaryFormData.append('file', base64Data);
-          cloudinaryFormData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-          cloudinaryFormData.append('public_id', publicId);
-          cloudinaryFormData.append('folder', 'ZIP_SKYMALL');
-          
-          // Отправляем в Cloudinary
-          const cloudinaryResponse = await fetch(CLOUDINARY_UPLOAD_URL, {
-            method: 'POST',
-            body: cloudinaryFormData
-          });
-          
-          if (!cloudinaryResponse.ok) {
-            const errorText = await cloudinaryResponse.text();
-            throw new Error(`Ошибка Cloudinary: ${errorText}`);
-          }
-          
-          const cloudinaryResult = await cloudinaryResponse.json();
-          
-          if (cloudinaryResult.error) {
-            throw new Error(`Cloudinary: ${cloudinaryResult.error.message}`);
-          }
-          
-          console.log('Cloudinary результат:', cloudinaryResult);
-          
-          // Используем простой метод для гарантированного результата
-          const formattedUrl = formatCloudinaryUrlSimple(cloudinaryResult);
-          
-          console.log('Форматированный Cloudinary URL:', formattedUrl);
-          
-          // Проверяем что URL правильный
-          if (!formattedUrl.includes('res.cloudinary.com')) {
-            throw new Error('Неправильный формат Cloudinary URL');
-          }
-          
-          // Шаг 2: Отправляем данные в Google Sheets
-          loaderMessage.textContent = 'Сохранение данных...';
-          
-          // Отправляем форматированную ссылку и base64
-          const formData = new FormData();
-          formData.append('number', number);
-          formData.append('qty', qty);
-          formData.append('imageUrl', formattedUrl);  // Форматированная Cloudinary ссылка для колонки D
-          formData.append('base64', base64Data);       // Base64 для ImgBB (колонка F)
-          
-          const response = await fetch(GAS_URL, {
-            method: 'POST',
-            body: formData
-          });
-          
-          if (!response.ok) {
-            throw new Error(`Ошибка сети: ${response.status}`);
-          }
-          
-          const result = await response.json();
-          
-          // Скрываем индикатор загрузки
-          loader.style.display = 'none';
-          submitBtn.disabled = false;
-          
-          if (result.result === 'success') {
+      try {
+        // Проверяем, существует ли номер
+        loaderMessage.textContent = 'Проверка номера детали...';
+        const exists = await checkPartNumberExists(number);
+        
+        let formattedUrl = null;
+        
+        // Загружаем фото ТОЛЬКО если это новая деталь
+        if (!exists) {
+          loaderMessage.textContent = 'Загрузка изображения в Cloudinary...';
+          const file = fileInput.files[0];
+          formattedUrl = await uploadToCloudinary(file, number);
+          console.log('Фото загружено для новой детали:', formattedUrl);
+        } else {
+          loaderMessage.textContent = 'Деталь существует, фото не загружается...';
+          console.log(`Номер ${number} уже существует, загрузка фото пропущена`);
+          // Не загружаем фото, оставляем старое
+        }
+        
+        loaderMessage.textContent = 'Сохранение данных...';
+        
+        const formDataToSend = new FormData();
+        formDataToSend.append('number', number);
+        formDataToSend.append('qty', qty);
+        if (formattedUrl) {
+          formDataToSend.append('imageUrl', formattedUrl);
+        }
+        
+        const gasResponse = await fetch(GAS_URL, {
+          method: 'POST',
+          body: formDataToSend
+        });
+        
+        if (!gasResponse.ok) {
+          throw new Error(`Ошибка сети: ${gasResponse.status}`);
+        }
+        
+        const result = await gasResponse.json();
+        
+        loader.style.display = 'none';
+        
+        if (result.result === 'success') {
+          if (result.details && result.details.existed) {
+            // Деталь существовала - только количество обновлено
+showMessage(
+  `✅ КОЛИЧЕСТВО ОБНОВЛЕНО!\n\n` +
+  `Номер детали: ${number}\n` +
+  `Было: ${result.details.oldQty}\n` +
+  `Добавлено: ${result.details.addedQty}\n` +
+  `Стало: ${result.details.newQty}`,
+  'success'
+);
+          } else {
+            // Новая деталь
             showMessage(
-              `✅ Данные сохранены!\n` +
-              `Номер: ${number}\n` +
+              `✅ НОВАЯ ДЕТАЛЬ ДОБАВЛЕНА!\n\n` +
+              `Номер детали: ${number}\n` +
               `Количество: ${qty}\n` +
-              `Ссылка: создана`,
+              `📸 Фото: загружено`,
               'success'
             );
-            
-            // Сбрасываем форму
-            document.getElementById('form').reset();
-            imagePreview.style.display = 'none';
-            
-            // Автофокус на первом поле
-            document.getElementById('number').focus();
-            
-            // Показываем ссылки в консоли для отладки
-            console.log('✅ Форматированный Cloudinary URL (колонка D):', formattedUrl);
-            console.log('✅ Исходный Cloudinary URL:', cloudinaryResult.secure_url);
-            
-          } else {
-            throw new Error(result.message || 'Ошибка сохранения');
           }
           
-        } catch (error) {
-          // Скрываем индикатор загрузки в случае ошибки
-          loader.style.display = 'none';
-          submitBtn.disabled = false;
+          form.reset();
+          imagePreview.style.display = 'none';
+          previewImage.src = '';
+          fileInput.value = '';
+          document.getElementById('number').focus();
           
-          console.error('Ошибка:', error);
-          showMessage(`❌ ${error.message}`, 'error');
+        } else {
+          throw new Error(result.message || 'Ошибка сохранения данных');
         }
-      };
-      
-      reader.onerror = function() {
+        
+      } catch (error) {
         loader.style.display = 'none';
+        console.error('Полная ошибка:', error);
+        
+        let errorText = error.message;
+        
+        if (errorText.includes('Cloudinary')) {
+          errorText = `❌ ОШИБКА ЗАГРУЗКИ ФОТО:\n${errorText}`;
+        } else if (errorText.includes('сеть') || errorText.includes('fetch')) {
+          errorText = `❌ ОШИБКА СЕТИ:\n${errorText}\nПроверьте интернет-соединение и повторите попытку.`;
+        } else {
+          errorText = `❌ ОШИБКА:\n${errorText}`;
+        }
+        
+        showMessage(errorText, 'error');
+        
+      } finally {
+        isSubmitting = false;
         submitBtn.disabled = false;
-        showMessage('❌ Ошибка при чтении файла', 'error');
-      };
-      
-      reader.readAsDataURL(file);
+      }
     });
     
-    // Улучшение UX: фокус на первом поле при загрузке
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('number').focus();
+      console.log('✅ Форма готова к работе.');
+      console.log('📌 Логика работы:');
+      console.log('   - Если номер НОВЫЙ: загружается фото + создается запись');
+      console.log('   - Если номер СУЩЕСТВУЕТ: фото НЕ загружается, только добавляется количество');
     });
   </script>
 </body>
